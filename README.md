@@ -27,7 +27,7 @@
 
 请在右侧或页面下方的 [Releases](https://github.com/wifixshare/network-adapter-monitor/releases/latest) 下载编译好的压缩包。
 
-1. 下载 `Network Monitor.rar`。
+1. 下载 `Network.Monitor.rar`。
 2. 解压到固定目录。
 3. 运行解压后的程序。
 4. 首次运行后，软件会自动加入当前用户的开机启动项。
