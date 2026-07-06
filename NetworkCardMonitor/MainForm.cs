@@ -30,7 +30,7 @@ internal sealed class MainForm : Form
     public MainForm(bool startInTray = false)
     {
         _startInTray = startInTray;
-        Text = "网卡监视器";
+        Text = "网卡监视器 wifix";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(720, 400);
         Size = new Size(900, 500);
