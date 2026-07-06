@@ -6,10 +6,10 @@ namespace NetworkCardMonitor;
 
 internal sealed class SpeedOverlayForm : Form
 {
-    private const int OverlayWidth = 134;
+    private const int OverlayWidth = 150;
     private const int OverlayHeight = 46;
     private const int SpeedLineHeight = 26;
-    private const int GapFromHiddenIconsButton = 20;
+    private const int GapFromHiddenIconsButton = 2;
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
     private const uint SwpNoSize = 0x0001;
