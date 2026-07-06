@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using NetworkCardMonitor.Services;
 
 namespace NetworkCardMonitor;
@@ -8,6 +9,7 @@ internal sealed class SpeedOverlayForm : Form
     private const int OverlayWidth = 160;
     private const int OverlayHeight = 46;
     private const int SpeedLineHeight = 26;
+    private const int GapFromHiddenIconsButton = 20;
     private const int WsExToolWindow = 0x00000080;
     private const int WsExNoActivate = 0x08000000;
     private const uint SwpNoSize = 0x0001;
@@ -248,7 +250,12 @@ internal sealed class SpeedOverlayForm : Form
 
             if (taskbar.Width > taskbar.Height)
             {
-                var right = hasTrayRect ? trayRect.Left - 6 : taskbar.Right - 220;
+                var hiddenIconsButtonLeft = trayHandle != IntPtr.Zero
+                    ? TryGetHiddenIconsButtonLeft(trayHandle, taskbar)
+                    : null;
+                var anchorLeft = hiddenIconsButtonLeft
+                    ?? (hasTrayRect ? trayRect.Left : taskbar.Right - 220);
+                var right = anchorLeft - GapFromHiddenIconsButton;
                 var x = Math.Max(taskbar.Left, right - OverlayWidth);
                 var height = Math.Max(1, taskbar.Height - 2);
                 var y = taskbar.Top + 1;
@@ -264,6 +271,49 @@ internal sealed class SpeedOverlayForm : Form
             OverlayHeight);
     }
 
+    private static int? TryGetHiddenIconsButtonLeft(IntPtr trayHandle, Rectangle taskbar)
+    {
+        var candidates = new List<Rectangle>();
+        EnumChildWindows(
+            trayHandle,
+            (childHandle, _) =>
+            {
+                var className = new StringBuilder(256);
+                if (GetClassName(childHandle, className, className.Capacity) <= 0)
+                {
+                    return true;
+                }
+
+                if (!string.Equals(className.ToString(), "Button", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (!GetWindowRect(childHandle, out var childRect))
+                {
+                    return true;
+                }
+
+                var bounds = childRect.ToRectangle();
+                if (bounds.Width is >= 8 and <= 50 &&
+                    bounds.Height is >= 8 and <= 60 &&
+                    bounds.IntersectsWith(taskbar))
+                {
+                    candidates.Add(bounds);
+                }
+
+                return true;
+            },
+            IntPtr.Zero);
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        return candidates.OrderBy(bounds => bounds.Left).First().Left;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern IntPtr FindWindow(string className, string? windowName);
 
@@ -277,6 +327,21 @@ internal sealed class SpeedOverlayForm : Form
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr windowHandle, out NativeRect rectangle);
+
+    private delegate bool EnumWindowsProc(IntPtr windowHandle, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumChildWindows(
+        IntPtr parentHandle,
+        EnumWindowsProc callback,
+        IntPtr parameter);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetClassName(
+        IntPtr windowHandle,
+        StringBuilder className,
+        int maxCount);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
