@@ -11,6 +11,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host ''
-Write-Host (Join-Path $output 'NetworkCardMonitor.exe') -ForegroundColor Green
+Write-Host (Join-Path $output 'Network Adapter Monitor.exe') -ForegroundColor Green
 Write-Host 'Build completed. Keep all files in the publish folder together.'
-Write-Host 'Run NetworkCardMonitor.exe once to enable startup automatically.'
+Write-Host 'Run Network Adapter Monitor.exe once to enable startup automatically.'

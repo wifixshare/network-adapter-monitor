@@ -6,6 +6,7 @@ echo Recreating project file...
 >"NetworkCardMonitor\NetworkCardMonitor.csproj" echo ^<Project Sdk="Microsoft.NET.Sdk"^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo   ^<PropertyGroup^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<OutputType^>WinExe^</OutputType^>
+>>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<AssemblyName^>Network Adapter Monitor^</AssemblyName^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<TargetFramework^>net8.0-windows^</TargetFramework^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<UseWindowsForms^>true^</UseWindowsForms^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<ImplicitUsings^>enable^</ImplicitUsings^>
@@ -35,6 +36,6 @@ if errorlevel 1 (
 )
 
 echo.
-echo Build completed: publish\NetworkCardMonitor.exe
+echo Build completed: publish\Network Adapter Monitor.exe
 echo Keep all files in the publish folder together.
 pause

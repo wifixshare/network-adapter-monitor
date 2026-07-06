@@ -42,7 +42,7 @@
 3. 生成的程序位于：
 
    ```text
-   publish\NetworkCardMonitor.exe
+   publish\Network Adapter Monitor.exe
    ```
 
 也可以用 PowerShell 编译：
