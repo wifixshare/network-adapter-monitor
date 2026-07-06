@@ -21,7 +21,7 @@ internal sealed class SpeedOverlayForm : Form
     private readonly Label _uploadLabel = new();
     private readonly Label _downloadLabel = new();
     private readonly Action _restoreAction;
-    private readonly System.Windows.Forms.Timer _keepAboveTimer = new() { Interval = 500 };
+    private readonly System.Windows.Forms.Timer _keepAboveTimer = new() { Interval = 5_000 };
     private bool _disposing;
 
     public SpeedOverlayForm(Action restoreAction)
@@ -97,9 +97,24 @@ internal sealed class SpeedOverlayForm : Form
     {
         var upload = NetworkAdapterService.FormatDataRate(uploadBytesPerSecond);
         var download = NetworkAdapterService.FormatDataRate(downloadBytesPerSecond);
-        _uploadLabel.Text = $"↑: {upload}";
-        _downloadLabel.Text = $"↓: {download}";
-        AccessibleName = $"{adapterName}，上传 {upload}，下载 {download}";
+        var uploadText = $"↑: {upload}";
+        var downloadText = $"↓: {download}";
+        var accessibleName = $"{adapterName}，上传 {upload}，下载 {download}";
+
+        if (!string.Equals(_uploadLabel.Text, uploadText, StringComparison.Ordinal))
+        {
+            _uploadLabel.Text = uploadText;
+        }
+
+        if (!string.Equals(_downloadLabel.Text, downloadText, StringComparison.Ordinal))
+        {
+            _downloadLabel.Text = downloadText;
+        }
+
+        if (!string.Equals(AccessibleName, accessibleName, StringComparison.Ordinal))
+        {
+            AccessibleName = accessibleName;
+        }
     }
 
     private void ConfigureSpeedLabel(Label label, string text)
@@ -163,8 +178,11 @@ internal sealed class SpeedOverlayForm : Form
             _downloadLabel.BackColor = backgroundColor;
         }
 
-        _uploadLabel.ForeColor = textColor;
-        _downloadLabel.ForeColor = textColor;
+        if (_uploadLabel.ForeColor.ToArgb() != textColor.ToArgb())
+        {
+            _uploadLabel.ForeColor = textColor;
+            _downloadLabel.ForeColor = textColor;
+        }
     }
 
     private Color? TrySampleTaskbarColor()

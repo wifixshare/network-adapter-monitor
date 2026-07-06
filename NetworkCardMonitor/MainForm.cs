@@ -15,6 +15,7 @@ internal sealed class MainForm : Form
     private readonly Button _openConnectionsButton = new();
     private readonly Button _refreshButton = new();
     private readonly System.Windows.Forms.Timer _refreshTimer = new() { Interval = 2_000 };
+    private readonly System.Windows.Forms.Timer _networkChangeTimer = new() { Interval = 750 };
     private readonly ImageList _statusImages = new();
     private readonly NotifyIcon _notifyIcon = new();
     private readonly ContextMenuStrip _trayMenu = new();
@@ -25,6 +26,7 @@ internal sealed class MainForm : Form
     private bool _refreshing;
     private bool _updatingStartupCheckBox;
     private bool _isInTray;
+    private string _lastNotifyIconText = string.Empty;
     private readonly bool _startInTray;
 
     public MainForm(bool startInTray = false)
@@ -85,6 +87,7 @@ internal sealed class MainForm : Form
         if (disposing)
         {
             _refreshTimer.Dispose();
+            _networkChangeTimer.Dispose();
             _statusImages.Dispose();
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
@@ -215,6 +218,11 @@ internal sealed class MainForm : Form
         _minimizeToTrayButton.Click += (_, _) => MinimizeToTray();
         _openConnectionsButton.Click += (_, _) => OpenNetworkConnections();
         _refreshTimer.Tick += (_, _) => RefreshAdapters();
+        _networkChangeTimer.Tick += (_, _) =>
+        {
+            _networkChangeTimer.Stop();
+            RefreshAdapters();
+        };
         _adapterList.ColumnClick += AdapterList_ColumnClick;
         _startupCheckBox.CheckedChanged += StartupCheckBox_CheckedChanged;
         NetworkChange.NetworkAddressChanged += NetworkChange_Changed;
@@ -222,6 +230,7 @@ internal sealed class MainForm : Form
         FormClosed += (_, _) =>
         {
             _refreshTimer.Stop();
+            _networkChangeTimer.Stop();
             NetworkChange.NetworkAddressChanged -= NetworkChange_Changed;
             NetworkChange.NetworkAvailabilityChanged -= NetworkChange_Changed;
         };
@@ -255,7 +264,11 @@ internal sealed class MainForm : Form
             return;
         }
 
-        BeginInvoke(new Action(RefreshAdapters));
+        BeginInvoke(new Action(() =>
+        {
+            _networkChangeTimer.Stop();
+            _networkChangeTimer.Start();
+        }));
     }
 
     private void RefreshAdapters()
@@ -271,12 +284,19 @@ internal sealed class MainForm : Form
         try
         {
             _adapters = NetworkAdapterService.GetAdapters();
-            UpdateAdapterList(GetSortedAdapters());
+            if (!_isInTray)
+            {
+                UpdateAdapterList(GetSortedAdapters());
+            }
+
             UpdateTraySpeed();
 
             var connected = _adapters.Count(adapter => adapter.IsConnected);
-            _summaryLabel.Text = $"共 {_adapters.Count} 个网卡，{connected} 个已连接";
-            _updatedLabel.Text = $"每 2 秒自动刷新 · 上次更新 {DateTime.Now:HH:mm:ss}";
+            if (!_isInTray)
+            {
+                _summaryLabel.Text = $"共 {_adapters.Count} 个网卡，{connected} 个已连接";
+                _updatedLabel.Text = $"每 2 秒自动刷新 · 上次更新 {DateTime.Now:HH:mm:ss}";
+            }
         }
         catch (Exception exception)
         {
@@ -330,6 +350,10 @@ internal sealed class MainForm : Form
         Show();
         WindowState = FormWindowState.Normal;
         Activate();
+        UpdateAdapterList(GetSortedAdapters());
+        var connected = _adapters.Count(adapter => adapter.IsConnected);
+        _summaryLabel.Text = $"共 {_adapters.Count} 个网卡，{connected} 个已连接";
+        _updatedLabel.Text = $"每 2 秒自动刷新 · 上次更新 {DateTime.Now:HH:mm:ss}";
     }
 
     private void ExitFromTray()
@@ -358,7 +382,12 @@ internal sealed class MainForm : Form
         _speedOverlay.KeepAboveTaskbar();
 
         var tooltip = $"{adapterName}  ↑ {NetworkAdapterService.FormatDataRate(upload)}  ↓ {NetworkAdapterService.FormatDataRate(download)}";
-        _notifyIcon.Text = tooltip.Length <= 63 ? tooltip : tooltip[..63];
+        var notifyText = tooltip.Length <= 63 ? tooltip : tooltip[..63];
+        if (!string.Equals(_lastNotifyIconText, notifyText, StringComparison.Ordinal))
+        {
+            _notifyIcon.Text = notifyText;
+            _lastNotifyIconText = notifyText;
+        }
     }
 
     private void AdapterList_ColumnClick(object? sender, ColumnClickEventArgs e)
