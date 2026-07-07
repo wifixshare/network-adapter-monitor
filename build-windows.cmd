@@ -7,6 +7,7 @@ echo Recreating project file...
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo   ^<PropertyGroup^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<OutputType^>WinExe^</OutputType^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<AssemblyName^>Network Adapter Monitor^</AssemblyName^>
+>>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<ApplicationIcon^>Resources\AppIcon.ico^</ApplicationIcon^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<TargetFramework^>net8.0-windows^</TargetFramework^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<UseWindowsForms^>true^</UseWindowsForms^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo     ^<ImplicitUsings^>enable^</ImplicitUsings^>

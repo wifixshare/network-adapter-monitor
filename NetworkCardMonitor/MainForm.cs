@@ -21,6 +21,7 @@ internal sealed class MainForm : Form
     private readonly ImageList _statusImages = new();
     private readonly NotifyIcon _notifyIcon = new();
     private readonly ContextMenuStrip _trayMenu = new();
+    private readonly Icon _applicationIcon;
     private readonly SpeedOverlayForm _speedOverlay;
     private static readonly TimeSpan IdlePauseAfter = TimeSpan.FromMinutes(5);
     private const int ActiveIdleCheckInterval = 30_000;
@@ -38,6 +39,7 @@ internal sealed class MainForm : Form
     public MainForm(bool startInTray = false)
     {
         _startInTray = startInTray;
+        _applicationIcon = LoadApplicationIcon();
         Text = "网卡监视器 wifix";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(720, 400);
@@ -45,7 +47,7 @@ internal sealed class MainForm : Form
         MinimizeBox = false;
         Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Regular, GraphicsUnit.Point);
         BackColor = Color.FromArgb(248, 249, 251);
-        Icon = SystemIcons.Application;
+        Icon = _applicationIcon;
 
         if (_startInTray)
         {
@@ -107,6 +109,7 @@ internal sealed class MainForm : Form
             _notifyIcon.Dispose();
             _trayMenu.Dispose();
             _speedOverlay.Dispose();
+            _applicationIcon.Dispose();
         }
 
         base.Dispose(disposing);
@@ -431,7 +434,7 @@ internal sealed class MainForm : Form
 
     private void ConfigureTray()
     {
-        _notifyIcon.Icon = SystemIcons.Application;
+        _notifyIcon.Icon = _applicationIcon;
         _notifyIcon.Text = "网卡监视器";
         _notifyIcon.Visible = false;
         _notifyIcon.DoubleClick += (_, _) => RestoreFromTray();
@@ -444,6 +447,24 @@ internal sealed class MainForm : Form
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add(exitItem);
         _notifyIcon.ContextMenuStrip = _trayMenu;
+    }
+
+    private static Icon LoadApplicationIcon()
+    {
+        try
+        {
+            var icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            if (icon != null)
+            {
+                return icon;
+            }
+        }
+        catch
+        {
+            // Fallback below keeps the app usable even if Windows cannot read the executable icon.
+        }
+
+        return (Icon)SystemIcons.Application.Clone();
     }
 
     private void MinimizeToTray()
