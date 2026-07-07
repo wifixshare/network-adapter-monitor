@@ -117,6 +117,28 @@ internal sealed class SpeedOverlayForm : Form
         }
     }
 
+    public void UpdatePaused()
+    {
+        const string uploadText = "↑: 休眠";
+        const string downloadText = "↓: 停止刷新";
+        const string accessibleName = "电脑空闲，网卡监视器已停止刷新";
+
+        if (!string.Equals(_uploadLabel.Text, uploadText, StringComparison.Ordinal))
+        {
+            _uploadLabel.Text = uploadText;
+        }
+
+        if (!string.Equals(_downloadLabel.Text, downloadText, StringComparison.Ordinal))
+        {
+            _downloadLabel.Text = downloadText;
+        }
+
+        if (!string.Equals(AccessibleName, accessibleName, StringComparison.Ordinal))
+        {
+            AccessibleName = accessibleName;
+        }
+    }
+
     private void ConfigureSpeedLabel(Label label, string text)
     {
         label.AutoSize = false;

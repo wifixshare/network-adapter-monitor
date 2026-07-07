@@ -16,16 +16,21 @@ internal sealed class MainForm : Form
     private readonly Button _refreshButton = new();
     private readonly System.Windows.Forms.Timer _refreshTimer = new() { Interval = 2_000 };
     private readonly System.Windows.Forms.Timer _networkChangeTimer = new() { Interval = 750 };
+    private readonly System.Windows.Forms.Timer _idleMonitorTimer = new() { Interval = 30_000 };
     private readonly ImageList _statusImages = new();
     private readonly NotifyIcon _notifyIcon = new();
     private readonly ContextMenuStrip _trayMenu = new();
     private readonly SpeedOverlayForm _speedOverlay;
+    private static readonly TimeSpan IdlePauseAfter = TimeSpan.FromMinutes(5);
+    private const int ActiveIdleCheckInterval = 30_000;
+    private const int PausedIdleCheckInterval = 5_000;
     private IReadOnlyList<NetworkAdapterInfo> _adapters = Array.Empty<NetworkAdapterInfo>();
     private int _sortColumn = -1;
     private bool _sortAscending = true;
     private bool _refreshing;
     private bool _updatingStartupCheckBox;
     private bool _isInTray;
+    private bool _refreshPausedForIdle;
     private string _lastNotifyIconText = string.Empty;
     private readonly bool _startInTray;
 
@@ -70,7 +75,12 @@ internal sealed class MainForm : Form
     {
         base.OnShown(e);
         RefreshAdapters();
-        _refreshTimer.Start();
+        if (!_refreshPausedForIdle)
+        {
+            _refreshTimer.Start();
+        }
+
+        _idleMonitorTimer.Start();
 
         if (_startInTray)
         {
@@ -88,6 +98,7 @@ internal sealed class MainForm : Form
         {
             _refreshTimer.Dispose();
             _networkChangeTimer.Dispose();
+            _idleMonitorTimer.Dispose();
             _statusImages.Dispose();
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
@@ -214,7 +225,7 @@ internal sealed class MainForm : Form
 
     private void RegisterEvents()
     {
-        _refreshButton.Click += (_, _) => RefreshAdapters();
+        _refreshButton.Click += (_, _) => ResumeFromIdle(refreshNow: true);
         _minimizeToTrayButton.Click += (_, _) => MinimizeToTray();
         _openConnectionsButton.Click += (_, _) => OpenNetworkConnections();
         _refreshTimer.Tick += (_, _) => RefreshAdapters();
@@ -223,6 +234,7 @@ internal sealed class MainForm : Form
             _networkChangeTimer.Stop();
             RefreshAdapters();
         };
+        _idleMonitorTimer.Tick += (_, _) => CheckIdleState();
         _adapterList.ColumnClick += AdapterList_ColumnClick;
         _startupCheckBox.CheckedChanged += StartupCheckBox_CheckedChanged;
         NetworkChange.NetworkAddressChanged += NetworkChange_Changed;
@@ -231,6 +243,7 @@ internal sealed class MainForm : Form
         {
             _refreshTimer.Stop();
             _networkChangeTimer.Stop();
+            _idleMonitorTimer.Stop();
             NetworkChange.NetworkAddressChanged -= NetworkChange_Changed;
             NetworkChange.NetworkAvailabilityChanged -= NetworkChange_Changed;
         };
@@ -266,15 +279,27 @@ internal sealed class MainForm : Form
 
         BeginInvoke(new Action(() =>
         {
+            if (ShouldPauseForIdle())
+            {
+                PauseForIdle();
+                return;
+            }
+
             _networkChangeTimer.Stop();
             _networkChangeTimer.Start();
         }));
     }
 
-    private void RefreshAdapters()
+    private void RefreshAdapters(bool force = false)
     {
         if (_refreshing || IsDisposed)
         {
+            return;
+        }
+
+        if (!force && ShouldPauseForIdle())
+        {
+            PauseForIdle();
             return;
         }
 
@@ -307,6 +332,87 @@ internal sealed class MainForm : Form
         {
             _refreshButton.Enabled = true;
             _refreshing = false;
+        }
+    }
+
+    private void CheckIdleState()
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (ShouldPauseForIdle())
+        {
+            PauseForIdle();
+            return;
+        }
+
+        if (_refreshPausedForIdle)
+        {
+            ResumeFromIdle(refreshNow: true);
+        }
+    }
+
+    private bool ShouldPauseForIdle()
+    {
+        var idleTime = LastInputService.GetIdleTime();
+        return idleTime.HasValue && idleTime.Value >= IdlePauseAfter;
+    }
+
+    private void PauseForIdle()
+    {
+        if (_refreshPausedForIdle)
+        {
+            return;
+        }
+
+        _refreshPausedForIdle = true;
+        _refreshTimer.Stop();
+        _networkChangeTimer.Stop();
+        _idleMonitorTimer.Interval = PausedIdleCheckInterval;
+        _refreshButton.Enabled = true;
+
+        if (_isInTray)
+        {
+            _speedOverlay.UpdatePaused();
+            SetNotifyIconText("网卡监视器 · 已休眠");
+        }
+        else
+        {
+            _updatedLabel.Text = "电脑已空闲超过 5 分钟，已暂停刷新 · 鼠标或键盘操作后自动恢复";
+        }
+    }
+
+    private void ResumeFromIdle(bool refreshNow)
+    {
+        if (!_refreshPausedForIdle)
+        {
+            if (!_refreshTimer.Enabled)
+            {
+                _refreshTimer.Start();
+            }
+
+            if (refreshNow)
+            {
+                RefreshAdapters(force: true);
+            }
+
+            return;
+        }
+
+        _refreshPausedForIdle = false;
+        _idleMonitorTimer.Interval = ActiveIdleCheckInterval;
+        _refreshTimer.Start();
+
+        if (!_isInTray)
+        {
+            _updatedLabel.Text = "已恢复刷新，正在读取网卡状态…";
+        }
+
+        if (refreshNow)
+        {
+            RefreshAdapters(force: true);
         }
     }
 
@@ -383,10 +489,15 @@ internal sealed class MainForm : Form
 
         var tooltip = $"{adapterName}  ↑ {NetworkAdapterService.FormatDataRate(upload)}  ↓ {NetworkAdapterService.FormatDataRate(download)}";
         var notifyText = tooltip.Length <= 63 ? tooltip : tooltip[..63];
-        if (!string.Equals(_lastNotifyIconText, notifyText, StringComparison.Ordinal))
+        SetNotifyIconText(notifyText);
+    }
+
+    private void SetNotifyIconText(string text)
+    {
+        if (!string.Equals(_lastNotifyIconText, text, StringComparison.Ordinal))
         {
-            _notifyIcon.Text = notifyText;
-            _lastNotifyIconText = notifyText;
+            _notifyIcon.Text = text;
+            _lastNotifyIconText = text;
         }
     }
 

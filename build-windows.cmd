@@ -15,7 +15,7 @@ echo Recreating project file...
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo   ^</PropertyGroup^>
 >>"NetworkCardMonitor\NetworkCardMonitor.csproj" echo ^</Project^>
 
-for %%F in ("NetworkCardMonitor\Program.cs" "NetworkCardMonitor\MainForm.cs" "NetworkCardMonitor\SpeedOverlayForm.cs" "NetworkCardMonitor\Models\NetworkAdapterInfo.cs" "NetworkCardMonitor\Services\NetworkAdapterService.cs" "NetworkCardMonitor\Services\StartupService.cs") do (
+for %%F in ("NetworkCardMonitor\Program.cs" "NetworkCardMonitor\MainForm.cs" "NetworkCardMonitor\SpeedOverlayForm.cs" "NetworkCardMonitor\Models\NetworkAdapterInfo.cs" "NetworkCardMonitor\Services\NetworkAdapterService.cs" "NetworkCardMonitor\Services\StartupService.cs" "NetworkCardMonitor\Services\LastInputService.cs") do (
     findstr /C:"END_OF_SOURCE_FILE" "%%~F" >nul
     if errorlevel 1 (
         echo Source file is incomplete: %%~F
