@@ -15,6 +15,7 @@ internal sealed class MainForm : Form
     private readonly Button _openConnectionsButton = new();
     private readonly Button _refreshButton = new();
     private readonly System.Windows.Forms.Timer _refreshTimer = new() { Interval = 2_000 };
+    private readonly System.Windows.Forms.Timer _detailsRefreshTimer = new() { Interval = 20_000 };
     private readonly System.Windows.Forms.Timer _networkChangeTimer = new() { Interval = 750 };
     private readonly System.Windows.Forms.Timer _idleMonitorTimer = new() { Interval = 30_000 };
     private readonly ImageList _statusImages = new();
@@ -74,10 +75,11 @@ internal sealed class MainForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
-        RefreshAdapters();
+        RefreshAdapters(force: true, refreshDetails: true);
         if (!_refreshPausedForIdle)
         {
             _refreshTimer.Start();
+            _detailsRefreshTimer.Start();
         }
 
         _idleMonitorTimer.Start();
@@ -97,6 +99,7 @@ internal sealed class MainForm : Form
         if (disposing)
         {
             _refreshTimer.Dispose();
+            _detailsRefreshTimer.Dispose();
             _networkChangeTimer.Dispose();
             _idleMonitorTimer.Dispose();
             _statusImages.Dispose();
@@ -214,7 +217,7 @@ internal sealed class MainForm : Form
             Padding = new Padding(16, 10, 16, 6)
         };
         _updatedLabel.AutoSize = true;
-        _updatedLabel.Text = "每 2 秒自动刷新";
+        _updatedLabel.Text = "速度每 2 秒刷新，详细信息每 20 秒刷新";
         _updatedLabel.ForeColor = Color.FromArgb(92, 99, 112);
         footer.Controls.Add(_updatedLabel);
 
@@ -225,14 +228,15 @@ internal sealed class MainForm : Form
 
     private void RegisterEvents()
     {
-        _refreshButton.Click += (_, _) => ResumeFromIdle(refreshNow: true);
+        _refreshButton.Click += (_, _) => ResumeFromIdle(refreshNow: true, refreshDetails: true);
         _minimizeToTrayButton.Click += (_, _) => MinimizeToTray();
         _openConnectionsButton.Click += (_, _) => OpenNetworkConnections();
-        _refreshTimer.Tick += (_, _) => RefreshAdapters();
+        _refreshTimer.Tick += (_, _) => RefreshAdapters(refreshDetails: false);
+        _detailsRefreshTimer.Tick += (_, _) => RefreshAdapters(refreshDetails: true);
         _networkChangeTimer.Tick += (_, _) =>
         {
             _networkChangeTimer.Stop();
-            RefreshAdapters();
+            RefreshAdapters(refreshDetails: true);
         };
         _idleMonitorTimer.Tick += (_, _) => CheckIdleState();
         _adapterList.ColumnClick += AdapterList_ColumnClick;
@@ -242,6 +246,7 @@ internal sealed class MainForm : Form
         FormClosed += (_, _) =>
         {
             _refreshTimer.Stop();
+            _detailsRefreshTimer.Stop();
             _networkChangeTimer.Stop();
             _idleMonitorTimer.Stop();
             NetworkChange.NetworkAddressChanged -= NetworkChange_Changed;
@@ -290,7 +295,7 @@ internal sealed class MainForm : Form
         }));
     }
 
-    private void RefreshAdapters(bool force = false)
+    private void RefreshAdapters(bool force = false, bool refreshDetails = false)
     {
         if (_refreshing || IsDisposed)
         {
@@ -308,7 +313,7 @@ internal sealed class MainForm : Form
 
         try
         {
-            _adapters = NetworkAdapterService.GetAdapters();
+            _adapters = NetworkAdapterService.GetAdapters(refreshDetails);
             if (!_isInTray)
             {
                 UpdateAdapterList(GetSortedAdapters());
@@ -320,7 +325,8 @@ internal sealed class MainForm : Form
             if (!_isInTray)
             {
                 _summaryLabel.Text = $"共 {_adapters.Count} 个网卡，{connected} 个已连接";
-                _updatedLabel.Text = $"每 2 秒自动刷新 · 上次更新 {DateTime.Now:HH:mm:ss}";
+                var refreshKind = refreshDetails ? "详细信息" : "实时速度";
+                _updatedLabel.Text = $"速度每 2 秒刷新，详细信息每 20 秒刷新 · {refreshKind}更新 {DateTime.Now:HH:mm:ss}";
             }
         }
         catch (Exception exception)
@@ -350,7 +356,7 @@ internal sealed class MainForm : Form
 
         if (_refreshPausedForIdle)
         {
-            ResumeFromIdle(refreshNow: true);
+            ResumeFromIdle(refreshNow: true, refreshDetails: true);
         }
     }
 
@@ -369,6 +375,7 @@ internal sealed class MainForm : Form
 
         _refreshPausedForIdle = true;
         _refreshTimer.Stop();
+        _detailsRefreshTimer.Stop();
         _networkChangeTimer.Stop();
         _idleMonitorTimer.Interval = PausedIdleCheckInterval;
         _refreshButton.Enabled = true;
@@ -384,7 +391,7 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void ResumeFromIdle(bool refreshNow)
+    private void ResumeFromIdle(bool refreshNow, bool refreshDetails)
     {
         if (!_refreshPausedForIdle)
         {
@@ -393,9 +400,14 @@ internal sealed class MainForm : Form
                 _refreshTimer.Start();
             }
 
+            if (!_detailsRefreshTimer.Enabled)
+            {
+                _detailsRefreshTimer.Start();
+            }
+
             if (refreshNow)
             {
-                RefreshAdapters(force: true);
+                RefreshAdapters(force: true, refreshDetails: refreshDetails);
             }
 
             return;
@@ -404,6 +416,7 @@ internal sealed class MainForm : Form
         _refreshPausedForIdle = false;
         _idleMonitorTimer.Interval = ActiveIdleCheckInterval;
         _refreshTimer.Start();
+        _detailsRefreshTimer.Start();
 
         if (!_isInTray)
         {
@@ -412,7 +425,7 @@ internal sealed class MainForm : Form
 
         if (refreshNow)
         {
-            RefreshAdapters(force: true);
+            RefreshAdapters(force: true, refreshDetails: refreshDetails);
         }
     }
 
@@ -456,10 +469,7 @@ internal sealed class MainForm : Form
         Show();
         WindowState = FormWindowState.Normal;
         Activate();
-        UpdateAdapterList(GetSortedAdapters());
-        var connected = _adapters.Count(adapter => adapter.IsConnected);
-        _summaryLabel.Text = $"共 {_adapters.Count} 个网卡，{connected} 个已连接";
-        _updatedLabel.Text = $"每 2 秒自动刷新 · 上次更新 {DateTime.Now:HH:mm:ss}";
+        ResumeFromIdle(refreshNow: true, refreshDetails: true);
     }
 
     private void ExitFromTray()

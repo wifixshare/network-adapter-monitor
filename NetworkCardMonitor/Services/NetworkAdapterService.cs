@@ -8,8 +8,9 @@ namespace NetworkCardMonitor.Services;
 internal static class NetworkAdapterService
 {
     private static readonly Dictionary<string, TrafficCounter> TrafficCounters = new();
+    private static readonly Dictionary<string, AdapterDetails> DetailsCache = new();
 
-    public static IReadOnlyList<NetworkAdapterInfo> GetAdapters()
+    public static IReadOnlyList<NetworkAdapterInfo> GetAdapters(bool refreshDetails)
     {
         var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces()
             .Where(adapter => adapter.NetworkInterfaceType != NetworkInterfaceType.Loopback)
@@ -21,14 +22,59 @@ internal static class NetworkAdapterService
             TrafficCounters.Remove(removedId);
         }
 
+        foreach (var removedId in DetailsCache.Keys.Where(id => !currentIds.Contains(id)).ToArray())
+        {
+            DetailsCache.Remove(removedId);
+        }
+
         return networkInterfaces
-            .Select(CreateAdapterInfo)
+            .Select(adapter => CreateAdapterInfo(adapter, refreshDetails))
             .OrderByDescending(adapter => adapter.IsConnected)
             .ThenBy(adapter => adapter.DisplayName, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
     }
 
-    private static NetworkAdapterInfo CreateAdapterInfo(NetworkInterface adapter)
+    private static NetworkAdapterInfo CreateAdapterInfo(NetworkInterface adapter, bool refreshDetails)
+    {
+        var details = GetAdapterDetails(adapter, refreshDetails);
+        var isConnected = adapter.OperationalStatus == OperationalStatus.Up;
+        var traffic = GetTrafficSpeed(adapter);
+        var linkSpeed = isConnected ? adapter.Speed : 0;
+
+        return new NetworkAdapterInfo(
+            adapter.Id,
+            details.Name,
+            details.Description,
+            details.AdapterType,
+            FormatStatus(adapter.OperationalStatus),
+            isConnected,
+            linkSpeed,
+            isConnected ? FormatSpeed(linkSpeed) : "—",
+            traffic.ReceiveBytesPerSecond,
+            traffic.SendBytesPerSecond,
+            traffic.ReceiveBytesPerSecond + traffic.SendBytesPerSecond,
+            traffic.HasSample
+                ? $"下载 {FormatDataRate(traffic.ReceiveBytesPerSecond)}  上传 {FormatDataRate(traffic.SendBytesPerSecond)}"
+                : "正在采样…",
+            details.IPv4,
+            details.IPv6,
+            details.Gateway,
+            details.MacAddress);
+    }
+
+    private static AdapterDetails GetAdapterDetails(NetworkInterface adapter, bool refreshDetails)
+    {
+        if (!refreshDetails && DetailsCache.TryGetValue(adapter.Id, out var cached))
+        {
+            return cached;
+        }
+
+        var details = CreateAdapterDetails(adapter);
+        DetailsCache[adapter.Id] = details;
+        return details;
+    }
+
+    private static AdapterDetails CreateAdapterDetails(NetworkInterface adapter)
     {
         var properties = TryGetIPProperties(adapter);
         var addresses = properties?.UnicastAddresses
@@ -45,25 +91,10 @@ internal static class NetworkAdapterService
             .Distinct()
             .ToArray() ?? [];
 
-        var isConnected = adapter.OperationalStatus == OperationalStatus.Up;
-        var traffic = GetTrafficSpeed(adapter);
-        var linkSpeed = isConnected ? adapter.Speed : 0;
-
-        return new NetworkAdapterInfo(
-            adapter.Id,
+        return new AdapterDetails(
             adapter.Name,
             adapter.Description,
             FormatAdapterType(adapter.NetworkInterfaceType),
-            FormatStatus(adapter.OperationalStatus),
-            isConnected,
-            linkSpeed,
-            isConnected ? FormatSpeed(linkSpeed) : "—",
-            traffic.ReceiveBytesPerSecond,
-            traffic.SendBytesPerSecond,
-            traffic.ReceiveBytesPerSecond + traffic.SendBytesPerSecond,
-            traffic.HasSample
-                ? $"下载 {FormatDataRate(traffic.ReceiveBytesPerSecond)}  上传 {FormatDataRate(traffic.SendBytesPerSecond)}"
-                : "正在采样…",
             string.IsNullOrEmpty(ipv4) ? "—" : ipv4,
             string.IsNullOrEmpty(ipv6) ? "—" : ipv6,
             gateways.Length == 0 ? "—" : string.Join(", ", gateways),
@@ -231,6 +262,35 @@ internal static class NetworkAdapterService
         public double SendBytesPerSecond { get; }
         public bool HasSample { get; }
         public static TrafficSpeed Empty => new TrafficSpeed(0, 0, false);
+    }
+
+    private readonly struct AdapterDetails
+    {
+        public AdapterDetails(
+            string name,
+            string description,
+            string adapterType,
+            string ipv4,
+            string ipv6,
+            string gateway,
+            string macAddress)
+        {
+            Name = name;
+            Description = description;
+            AdapterType = adapterType;
+            IPv4 = ipv4;
+            IPv6 = ipv6;
+            Gateway = gateway;
+            MacAddress = macAddress;
+        }
+
+        public string Name { get; }
+        public string Description { get; }
+        public string AdapterType { get; }
+        public string IPv4 { get; }
+        public string IPv6 { get; }
+        public string Gateway { get; }
+        public string MacAddress { get; }
     }
 }
 
